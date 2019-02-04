@@ -34,7 +34,13 @@ import pandas as pd
 import scipy
 from ..specs import Dict
 from .utils import colorList, exception, getCellsInclude, getSpktSpkid, _showFigure, _saveFigData, syncMeasure, _smooth1d
+import holoviews as hv
+renderer = hv.renderer('bokeh')
 
+import time
+from bokeh.server.server import Server
+from tornado.ioloop import IOLoop
+from tornado.ioloop import PeriodicCallback
 
 # -------------------------------------------------------------------------------------------------------------------
 ## Calculate avg and peak rate of different subsets of cells for specific time period
@@ -291,6 +297,14 @@ def plotSyncs (include =['allCells', 'eachPop'], timeRanges = None, timeRangeLab
 # -------------------------------------------------------------------------------------------------------------------
 ## Raster plot
 # -------------------------------------------------------------------------------------------------------------------
+############# holoviews with bokeh
+def cb(server, loop):
+    inp = raw_input('shutting down if press y ')
+    if inp=='y':
+        server.stop()
+        loop.stop()
+#############
+
 @exception
 def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, orderBy = 'gid', orderInverse = False, labels = 'legend', popRates = False,
         spikeHist = None, spikeHistBin = 5, syncLines = False, lw = 2, marker = '|', markerSize=5, popColors = None, figSize = (10,8), dpi = 100, saveData = None, saveFig = None,
@@ -420,6 +434,9 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
 
     if spikeHist:
         histo = np.histogram(sel['spkt'].tolist(), bins = np.arange(timeRange[0], timeRange[1], spikeHistBin))
+        ############# holoviews with bokeh
+        #hvHisto = hv.Histogram(histo, kdims=['opened'])
+        ##################
         histoT = histo[1][:-1]+spikeHistBin/2
         histoCount = histo[0]
     # Plot spikes
@@ -430,8 +447,25 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
         gs = gridspec.GridSpec(2, 1,height_ratios=[2,1])
         ax1=plt.subplot(gs[0])
     sel['spkt'] = sel['spkt'].apply(pd.to_numeric)
+    # TODO color use
     sel.plot.scatter(ax=ax1, x='spkt', y='spkind', lw=lw, s=markerSize, marker=marker, c=sel['spkgidColor'].tolist()) # Create raster
     ax1.set_xlim(timeRange)
+
+    ############# holoviews with bokeh
+    #hvScatter = hv.Scatter(sel, 'spkt', 'spkind')
+    #if spikeHist == 'subplot':
+    #    hvScatter.hist(num_bins=int((timeRange[1]-timeRange[0])/spikeHistBin), dimension=['spkt'])
+    #app = renderer.app(scatter)
+    #server = Server({'/': app}, port=0)
+    #server.start()
+    #server.show('/')
+
+    ##pc = PeriodicCallback(cb, server, loop, 10000)
+    ##pc.start()
+    #loop = IOLoop.current()
+    #loop.add_timeout(time.time()+5, cb, server, loop)
+    #loop.start() 
+    ##################
 
     # Plot stats
     gidPops = df['pop'].tolist()
@@ -456,6 +490,7 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
             avgRates['NetStims'] = len([spkid for spkid in sel['spkind'].iloc[numCellSpks:]])/numNetStims/tsecs
 
     # Plot synchrony lines
+    #import pdb; pdb.set_trace()
     if syncLines:
         for spkt in sel['spkt'].tolist():
             ax1.plot((spkt, spkt), (0, len(cells)+numNetStims), 'r-', linewidth=0.1)
