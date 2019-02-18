@@ -435,7 +435,7 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
     if spikeHist:
         histo = np.histogram(sel['spkt'].tolist(), bins = np.arange(timeRange[0], timeRange[1], spikeHistBin))
         ############# holoviews with bokeh
-        #hvHisto = hv.Histogram(histo, kdims=['opened'])
+        hvHisto = hv.Histogram(histo, kdims=['opened'])
         ##################
         histoT = histo[1][:-1]+spikeHistBin/2
         histoCount = histo[0]
@@ -447,24 +447,24 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
         gs = gridspec.GridSpec(2, 1,height_ratios=[2,1])
         ax1=plt.subplot(gs[0])
     sel['spkt'] = sel['spkt'].apply(pd.to_numeric)
-    # TODO color use
+    # TODO color use and other options
     sel.plot.scatter(ax=ax1, x='spkt', y='spkind', lw=lw, s=markerSize, marker=marker, c=sel['spkgidColor'].tolist()) # Create raster
     ax1.set_xlim(timeRange)
 
     ############# holoviews with bokeh
-    #hvScatter = hv.Scatter(sel, 'spkt', 'spkind')
-    #if spikeHist == 'subplot':
-    #    hvScatter.hist(num_bins=int((timeRange[1]-timeRange[0])/spikeHistBin), dimension=['spkt'])
-    #app = renderer.app(scatter)
-    #server = Server({'/': app}, port=0)
-    #server.start()
-    #server.show('/')
+    hvScatter = hv.Scatter(sel, 'spkt', 'spkind')
 
-    ##pc = PeriodicCallback(cb, server, loop, 10000)
-    ##pc.start()
-    #loop = IOLoop.current()
-    #loop.add_timeout(time.time()+5, cb, server, loop)
-    #loop.start() 
+    # Creating final plot
+    layout = hvScatter
+    layout.opts(
+        hv.opts.Scatter(height=700, width=900),
+        )
+    if spikeHist == 'subplot':
+        layout = layout + hvHisto#hvScatter.hist(num_bins=int((timeRange[1]-timeRange[0])/spikeHistBin), dimension=['spkt'])
+        layout.opts(
+            hv.opts.Scatter(height=400, width=900),
+            hv.opts.Histogram(height=300, width=900)
+            ).cols(1)
     ##################
 
     # Plot stats
@@ -490,10 +490,14 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
             avgRates['NetStims'] = len([spkid for spkid in sel['spkind'].iloc[numCellSpks:]])/numNetStims/tsecs
 
     # Plot synchrony lines
-    #import pdb; pdb.set_trace()
     if syncLines:
         for spkt in sel['spkt'].tolist():
             ax1.plot((spkt, spkt), (0, len(cells)+numNetStims), 'r-', linewidth=0.1)
+        ############# holoviews with bokeh
+        hvSpikes = hv.Spikes(sel['spkt']).opts(color='red', spike_length=200, line_width=0.1)
+        layout = layout*hvSpikes
+        ##################
+        #import pdb; pdb.set_trace()
         plt.title('cells=%i syns/cell=%0.1f rate=%0.1f Hz sync=%0.2f' % (numCells,connsPerCell,firingRate,syncMeasure()), fontsize=fontsiz)
     else:
         plt.title('cells=%i syns/cell=%0.1f rate=%0.1f Hz' % (numCells,connsPerCell,firingRate), fontsize=fontsiz)
@@ -570,6 +574,18 @@ def plotRaster (include = ['allCells'], timeRange = None, maxSpikes = 1e8, order
     # show fig
     if showFig: _showFigure()
 
+    ############# holoviews with bokeh
+    app = renderer.app(layout)
+    server = Server({'/': app}, port=0)
+    server.start()
+    server.show('/')
+
+    #pc = PeriodicCallback(cb, server, loop, 10000)
+    #pc.start()
+    loop = IOLoop.current()
+    loop.add_timeout(time.time()+5, cb, server, loop)
+    loop.start() 
+    ##################
     return fig, {'include': include, 'spkts': spkts, 'spkinds': sel['spkind'].tolist(), 'timeRange': timeRange}
 
 
